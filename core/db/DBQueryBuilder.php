@@ -98,10 +98,12 @@ class DBQueryBuilder
 
     public function execUpdate():void {
         $q = "UPDATE {$this->query_parts["table"]} SET ";
+        // do assignment list field=value;
         for ($i=0;$i<count($this->query_parts["fields"]);$i++){
             $q.="{$this->query_parts["fields"][$i]}={$this->query_parts["values"][$i]}";
             if (!end($this->query_parts["fields"]))$q.=",";
         }
+        //check where
         if(!empty($this->query_parts["where"])){
             $q.=" WHERE";
             foreach ($this->query_parts["where"] as $w){
