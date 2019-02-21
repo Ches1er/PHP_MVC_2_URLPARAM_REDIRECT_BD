@@ -49,6 +49,10 @@ class DBQueryBuilder
         $stmt= $this->dbh->prepare($q);
         $stmt->execute();
     }
+    private function isAggregate(string $field):bool{
+        $pattern = '/.*\(.*\)/';
+        return preg_match($pattern,$field);
+    }
 
     //INSERT
 
@@ -113,7 +117,8 @@ class DBQueryBuilder
     public function select(array $fields)
     {
         $this->query_parts["fields"] = array_map(function ($f) {
-            return self::_field($f);
+            if ($this->isAggregate($f))return $f;
+            else return self::_field($f);
         }, $fields);
         return $this;
     }
@@ -122,6 +127,8 @@ class DBQueryBuilder
         $this->query_parts["table"] = self::_field($table);
         return $this;
     }
+
+    //WHERE
 
     private function _where($type,$field,$sign,$value,bool $native){
         if($value===null) {
@@ -178,12 +185,75 @@ class DBQueryBuilder
         return $this;
     }
 
+    //GROUP BY
+
+    public function groupBy(array $fields){
+        $this->query_parts["groupby"]=implode(",",$fields);
+        return $this;
+    }
+
+    //HAVING
+
+    private function _having($type,$field,$sign,$value,bool $native){
+        if($value===null) {
+            $value = $sign;
+            $sign = "=";
+        }
+        if(!$native) $field = self::_field($field);
+        if(!$native && $value[0]!="?" && $value[0]!=":" && !is_integer($value)) $value=$this->dbh->quote($value);
+        $this->query_parts["having"][] = [$type,$field,$sign,$value];
+    }
+
+    public function having($field,$sign,$value=null,bool $native=false){
+        $this->_having("",$field,$sign,$value,$native);
+        return $this;
+    }
+    public function andHaving($field,$sign,$value=null,bool $native=false){
+        $this->_having("AND",$field,$sign,$value,$native);
+        return $this;
+    }
+    public function orHaving($field,$sign,$value=null,bool $native=false){
+        $this->_having("OR",$field,$sign,$value,$native);
+        return $this;
+    }
+    private function _groupHaving(callable $where,$type){
+        if($type!=null) $this->query_parts["having"][]=[$type];
+        $this->query_parts["having"][]=["("];
+        $where($this);
+        $this->query_parts["having"][]=[")"];
+        return $this;
+    }
+    public function havingGroup(callable $having){
+        return $this->_groupHaving($having,null);
+    }
+    public function andHavingGroup(callable $having){
+        return $this->_groupHaving($having,"AND");
+    }
+    public function orHavingGroup(callable $having){
+        return $this->_groupHaving($having,"OR");
+    }
+
     //SELECT builder
 
     private function buildSelect(){
         $fields = empty($this->query_parts["fields"])?"*":implode(", ",$this->query_parts["fields"]);
 
         $q = "SELECT {$fields} FROM {$this->query_parts["table"]}";
+
+        //GROUP BY check
+
+        if (!empty($this->query_parts["groupby"])){
+            $q.=" GROUP BY {$this->query_parts["groupby"]}";
+
+            //HAVING check
+            if(!empty($this->query_parts["having"])){
+                $q.=" HAVING";
+                foreach ($this->query_parts["having"] as $h){
+                    $q.=" {$h[0]} ";
+                    if(count($h)>1) $q.="({$h[1]} {$h[2]} {$h[3]})";
+                }
+            }
+        }
 
         //WHERE check
 
@@ -210,7 +280,7 @@ class DBQueryBuilder
             $q.=" LIMIT {$this->query_parts["limit"]}";
             if (!is_null($this->query_parts["offset"]))$q.=" OFFSET {$this->query_parts["offset"]}";
         }
-
+        echo $q;
         return $q;
     }
 

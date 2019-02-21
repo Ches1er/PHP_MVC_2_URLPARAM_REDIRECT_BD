@@ -1,7 +1,7 @@
 <?php
 return [
-    "notes"=>[
-        "name"=>"notes",
+    "publishing"=>[
+        "name"=>"publishing_company",
         "user"=>"root",
         "pass"=>"",
         "host"=>"127.0.0.1",
